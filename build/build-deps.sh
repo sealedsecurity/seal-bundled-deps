@@ -49,6 +49,12 @@ echo "=== seal-bundled-deps build (arch=${ARCH}, out=${OUT_DIR}) ==="
 # meson/ninja for xdg-dbus-proxy; glib-static + its static deps for
 # the static-GLib link; build-base for cc/make; the *-static packages
 # carry the .a archives the static link needs.
+#
+# util-linux-static is load-bearing: static GIO transitively links
+# libmount + libblkid (GLib's file-monitoring / mount-point code), and
+# without the .a archives the final `-static` link fails with
+# unresolved `-lmount -lblkid`. glib-dev pulls the *dynamic* util-linux
+# libs but not their static counterparts.
 echo "--- apk: build toolchain + static libs"
 apk add --no-cache \
     build-base linux-headers pkgconf \
@@ -59,6 +65,7 @@ apk add --no-cache \
     libffi-dev \
     pcre2-dev \
     gettext-static \
+    util-linux-static \
     musl-dev >/dev/null
 
 provenance="${OUT_DIR}/PROVENANCE.txt"

@@ -23,13 +23,19 @@
 set -euo pipefail
 
 # ─── Pinned upstream versions ─────────────────────────────────────
-# Bump deliberately; refresh the source sha256s alongside. The first
-# CI run records the resolved values into PROVENANCE.txt — keep these
-# in sync with what that run verified.
+# Bump deliberately; refresh the source sha256s alongside. Every
+# dependency's source tarball is sha256-pinned + enforced (a mismatch
+# aborts the build) — these binaries run inside user sandboxes, so an
+# unverified source is unacceptable. The shas below are the upstream
+# maintainers' published values (bwrap + xdg-dbus-proxy ship them in
+# their GitHub release notes; bwrap's release is GPG-signed). The
+# build re-verifies on every run via fetch_verify.
 DASH_VERSION="${DASH_VERSION:-0.5.12}"
-DASH_SHA256="${DASH_SHA256:-}"   # set to enforce; empty = record-only
+DASH_SHA256="${DASH_SHA256:-6a474ac46e8b0b32916c4c60df694c82058d3297d8b385b74508030ca4a8f28a}"
 BWRAP_VERSION="${BWRAP_VERSION:-0.11.0}"
+BWRAP_SHA256="${BWRAP_SHA256:-988fd6b232dafa04b8b8198723efeaccdb3c6aa9c1c7936219d5791a8b7a8646}"
 XDP_VERSION="${XDP_VERSION:-0.1.6}"
+XDP_SHA256="${XDP_SHA256:-131bf59fce7c7ee7ecbc5d9106d6750f4f597bfe609966573240f7e4952973a1}"
 
 ARCH="${ARCH:-$(uname -m)}"
 OUT_DIR="${OUT_DIR:-out/${ARCH}}"
@@ -82,8 +88,12 @@ fetch_verify() {
 # ─── dash (sh) ────────────────────────────────────────────────────
 echo "--- build dash ${DASH_VERSION} (static)"
 dash_tar="${WORK}/dash.tar.gz"
+# Debian's HTTPS mirror serves the byte-identical upstream orig
+# tarball. The upstream gondor.apana.org.au mirror only serves plain
+# HTTP (its HTTPS endpoint fails the TLS handshake), so we fetch over
+# HTTPS from Debian and pin the same sha256.
 fetch_verify \
-    "http://gondor.apana.org.au/~herbert/dash/files/dash-${DASH_VERSION}.tar.gz" \
+    "https://deb.debian.org/debian/pool/main/d/dash/dash_${DASH_VERSION}.orig.tar.gz" \
     "$dash_tar" "$DASH_SHA256" "dash"
 tar -C "$WORK" -xzf "$dash_tar"
 (
@@ -99,7 +109,7 @@ echo "--- build bubblewrap ${BWRAP_VERSION} (static)"
 bwrap_tar="${WORK}/bwrap.tar.xz"
 fetch_verify \
     "https://github.com/containers/bubblewrap/releases/download/v${BWRAP_VERSION}/bubblewrap-${BWRAP_VERSION}.tar.xz" \
-    "$bwrap_tar" "" "bubblewrap"
+    "$bwrap_tar" "$BWRAP_SHA256" "bubblewrap"
 tar -C "$WORK" -xf "$bwrap_tar"
 (
     cd "${WORK}/bubblewrap-${BWRAP_VERSION}"
@@ -124,7 +134,7 @@ echo "--- build xdg-dbus-proxy ${XDP_VERSION} (static + static GLib)"
 xdp_tar="${WORK}/xdp.tar.xz"
 fetch_verify \
     "https://github.com/flatpak/xdg-dbus-proxy/releases/download/${XDP_VERSION}/xdg-dbus-proxy-${XDP_VERSION}.tar.xz" \
-    "$xdp_tar" "" "xdg-dbus-proxy"
+    "$xdp_tar" "$XDP_SHA256" "xdg-dbus-proxy"
 tar -C "$WORK" -xf "$xdp_tar"
 (
     cd "${WORK}/xdg-dbus-proxy-${XDP_VERSION}"
@@ -151,8 +161,12 @@ for b in sh bwrap xdg-dbus-proxy; do
         ldd "$path" >&2 || true
         exit 1
     fi
-    sha256sum "$path" | awk -v n="$b" '{print $1}' >"${path}.sha256"
-    echo "${b} binary sha256: $(cat "${path}.sha256")" >>"$provenance"
+    # Write the sidecar in the standard `<hex>  <filename>` format
+    # (basename, not full path) so a consumer can `cd "$OUT_DIR" &&
+    # sha256sum --check "${b}.sha256"` directly. The provenance line
+    # records just the hex for a quick human scan.
+    ( cd "${OUT_DIR}" && sha256sum "${b}" >"${b}.sha256" )
+    echo "${b} binary sha256: $(awk '{print $1}' "${path}.sha256")" >>"$provenance"
 done
 
 echo "=== done. artifacts in ${OUT_DIR}:"

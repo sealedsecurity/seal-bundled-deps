@@ -43,8 +43,11 @@ binary via `build.rs`. Each archive's `bin/` layout mirrors
 
 ## Bumping a bundled dependency
 
-1. Edit the pinned version (and, for `dash`, the source `*_SHA256`) at
-   the top of `build/build-deps.sh`.
+1. Edit the pinned version **and** its `*_SHA256` (every dep —
+   `DASH_SHA256`, `BWRAP_SHA256`, `XDP_SHA256`) at the top of
+   `build/build-deps.sh`. The shas are enforced: a mismatch aborts the
+   build, so a stale sha after a version bump fails loudly rather than
+   shipping the wrong source.
 2. Push a new `bundled-deps-vN` tag. The Buildkite pipeline builds
    both arches and publishes the release.
 3. In the `seal` repo, bump the `BUNDLED_DEPS_TAG` the release build

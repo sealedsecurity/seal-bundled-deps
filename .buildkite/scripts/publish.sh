@@ -16,6 +16,13 @@
 set -euo pipefail
 
 : "${BUNDLED_DEPS_TAG:?must set the release tag}"
+# Defense in depth: the `just release` recipe already enforces this,
+# but validate the tag namespace here too so a manual / mis-set
+# BUNDLED_DEPS_TAG can't publish a release outside the contract.
+if [[ ! "$BUNDLED_DEPS_TAG" =~ ^bundled-deps-v[0-9]+$ ]]; then
+    echo "FATAL: BUNDLED_DEPS_TAG='${BUNDLED_DEPS_TAG}' must match bundled-deps-vN" >&2
+    exit 1
+fi
 ARCHES="${ARCHES:-x86_64 aarch64}"
 REPO="sealedsecurity/seal-bundled-deps"
 here="$(dirname "$0")"
@@ -57,12 +64,15 @@ for arch in $ARCHES; do
         exit 1
     fi
     base="seal-bundled-deps-${arch}"
-    # Tar the three binaries (+ their .sha256 + PROVENANCE) with a
-    # `bin/` prefix so the archive layout mirrors what seal extracts
-    # into ~/.seal/internal/bin/ verbatim.
+    # Tar the three binaries + their `.sha256` sidecars + PROVENANCE
+    # with a `bin/` prefix so the archive layout mirrors what seal
+    # extracts into ~/.seal/internal/bin/ verbatim. The per-binary
+    # sidecars let a consumer `sha256sum --check` each binary inside
+    # the extracted tree.
     staging="$(mktemp -d)/${base}"
     mkdir -p "${staging}/bin"
     cp "${src}/sh" "${src}/bwrap" "${src}/xdg-dbus-proxy" "${staging}/bin/"
+    cp "${src}/sh.sha256" "${src}/bwrap.sha256" "${src}/xdg-dbus-proxy.sha256" "${staging}/bin/"
     cp "${src}/PROVENANCE.txt" "${staging}/"
     tar -C "$(dirname "$staging")" -cf "dist/${base}.tar" "${base}"
     zstd -19 -f "dist/${base}.tar" -o "dist/${base}.tar.zst"

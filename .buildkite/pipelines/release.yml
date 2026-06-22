@@ -11,6 +11,12 @@
 # Cadence: this pipeline runs RARELY — only when a bundled dep version
 # is bumped (edit build/build-deps.sh, push a new bundled-deps-vN tag).
 # seal's own release pipeline consumes the published assets.
+#
+# The Alpine base is pinned by digest (multi-arch OCI index covering
+# linux/amd64 + linux/arm64) for reproducible builds — no silent
+# base-image drift between runs. Refresh the digest when bumping the
+# Alpine minor version:
+#   docker buildx imagetools inspect alpine:3.21 --format '{{.Manifest.Digest}}'
 
 env:
   BUNDLED_DEPS_TAG: "${BUILDKITE_TAG}"
@@ -26,7 +32,7 @@ steps:
         timeout_in_minutes: 30
         plugins:
           - docker#v5.13.0:
-              image: "alpine:3.21"
+              image: "alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d"
               # The build needs root in-container for apk + needs to
               # write the bind-mounted workspace back out.
               propagate-environment: true
@@ -42,7 +48,7 @@ steps:
         timeout_in_minutes: 60
         plugins:
           - docker#v5.13.0:
-              image: "alpine:3.21"
+              image: "alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d"
               platform: "linux/arm64"
               propagate-environment: true
               mount-buildkite-agent: false

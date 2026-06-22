@@ -145,12 +145,16 @@ fetch_verify \
 tar -C "$WORK" -xf "$xdp_tar"
 (
     cd "${WORK}/xdg-dbus-proxy-${XDP_VERSION}"
+    # NOTE: do NOT redirect meson/ninja to /dev/null — static GLib is
+    # the fiddliest link of the set, and swallowing ninja's output
+    # hides the linker's undefined-symbol list on failure. Keep it
+    # verbose so a link break is diagnosable from the CI log.
     meson setup build \
         --default-library=static \
         -Dprefer_static=true \
         --buildtype=release \
-        -Dc_link_args=-static >/dev/null
-    ninja -C build >/dev/null
+        -Dc_link_args=-static
+    ninja -C build -v
     cp build/xdg-dbus-proxy "${OUT_DIR}/xdg-dbus-proxy"
 )
 strip "${OUT_DIR}/xdg-dbus-proxy"

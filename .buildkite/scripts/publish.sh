@@ -15,12 +15,17 @@
 # script installs a pinned gh, mints the App token, and exports it.
 set -euo pipefail
 
-: "${BUNDLED_DEPS_TAG:?must set the release tag}"
-# Defense in depth: the `just release` recipe already enforces this,
-# but validate the tag namespace here too so a manual / mis-set
-# BUNDLED_DEPS_TAG can't publish a release outside the contract.
+# Resolve the release tag. Normally set via the pipeline `env:` from
+# ${BUILDKITE_TAG} (a real tag push). Fall back to ${BUILDKITE_BRANCH}
+# so a manual UI build on a `bundled-deps-vN` branch also works — the
+# namespace check below rejects anything that isn't a real release tag.
+BUNDLED_DEPS_TAG="${BUNDLED_DEPS_TAG:-}"
+if [[ -z "$BUNDLED_DEPS_TAG" ]]; then
+    BUNDLED_DEPS_TAG="${BUILDKITE_BRANCH:-}"
+fi
 if [[ ! "$BUNDLED_DEPS_TAG" =~ ^bundled-deps-v[0-9]+$ ]]; then
-    echo "FATAL: BUNDLED_DEPS_TAG='${BUNDLED_DEPS_TAG}' must match bundled-deps-vN" >&2
+    echo "FATAL: release tag '${BUNDLED_DEPS_TAG}' must match bundled-deps-vN" >&2
+    echo "       (set BUNDLED_DEPS_TAG, push a bundled-deps-vN tag, or run from such a branch)" >&2
     exit 1
 fi
 ARCHES="${ARCHES:-x86_64 aarch64}"

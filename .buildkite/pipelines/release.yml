@@ -1,0 +1,74 @@
+# seal-bundled-deps — build the static dispatcher dependencies seal
+# bundles (SEA-707) and publish them as a `bundled-deps-vN` GitHub
+# Release. Triggered by pushing a `bundled-deps-v*` tag.
+#
+# Two arch artifacts: x86_64 builds natively on the self-hosted Linux
+# agent; aarch64 builds in an emulated arm64 Alpine container (QEMU
+# binfmt on the agent). Both run the same build/build-deps.sh inside
+# an Alpine image via the docker plugin — Alpine gives musl + the
+# *-static apk packages the static-GLib xdg-dbus-proxy link needs.
+#
+# Cadence: this pipeline runs RARELY — only when a bundled dep version
+# is bumped (edit build/build-deps.sh, push a new bundled-deps-vN tag).
+# seal's own release pipeline consumes the published assets.
+
+env:
+  BUNDLED_DEPS_TAG: "${BUILDKITE_TAG}"
+
+steps:
+  - group: ":package: Build static deps"
+    key: "build-all"
+    steps:
+      - label: ":linux: x86_64"
+        key: "build-x86_64"
+        agents:
+          queue: "linux-x64-selfhosted"
+        timeout_in_minutes: 30
+        plugins:
+          - docker#v5.13.0:
+              image: "alpine:3.21"
+              # The build needs root in-container for apk + needs to
+              # write the bind-mounted workspace back out.
+              propagate-environment: true
+              mount-buildkite-agent: false
+              command: ["sh", "-c", "apk add --no-cache bash && ARCH=x86_64 bash build/build-deps.sh"]
+        artifact_paths:
+          - "out/x86_64/*"
+
+      - label: ":linux: aarch64 (emulated)"
+        key: "build-aarch64"
+        agents:
+          queue: "linux-x64-selfhosted"
+        timeout_in_minutes: 60
+        plugins:
+          - docker#v5.13.0:
+              image: "alpine:3.21"
+              platform: "linux/arm64"
+              propagate-environment: true
+              mount-buildkite-agent: false
+              command: ["sh", "-c", "apk add --no-cache bash && ARCH=aarch64 bash build/build-deps.sh"]
+        artifact_paths:
+          - "out/aarch64/*"
+
+  - wait
+
+  - label: ":rocket: Publish bundled-deps release"
+    key: "publish"
+    agents:
+      queue: "linux-x64-selfhosted"
+    timeout_in_minutes: 15
+    plugins:
+      # Mint a GitHub App installation token the same way seal's
+      # release-publish does. The App needs Contents:write on
+      # sealedsecurity/seal-bundled-deps.
+      - sealedsecurity/secret-env#9a2cdda43c14dd89901d0bcabe0bd191d067f8cc:
+          variables:
+            GH_APP_ID: GH_APP_ID
+            GH_APP_PRIVATE_KEY_B64: GH_APP_PRIVATE_KEY_B64
+    commands:
+      - "echo '--- :package: download build artifacts'"
+      - "buildkite-agent artifact download 'out/x86_64/*' ."
+      - "buildkite-agent artifact download 'out/aarch64/*' ."
+      - "ls -la out/x86_64 out/aarch64"
+      - "echo '+++ :rocket: publish'"
+      - "bash .buildkite/scripts/publish.sh"

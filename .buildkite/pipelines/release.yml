@@ -3,8 +3,9 @@
 # Release. Triggered by pushing a `bundled-deps-v*` tag.
 #
 # Two arch artifacts: x86_64 builds natively on the self-hosted Linux
-# agent; aarch64 builds in an emulated arm64 Alpine container (QEMU
-# binfmt on the agent). Both run the same build/build-deps.sh inside
+# agent; aarch64 builds natively on the hosted `linux-arm-medium`
+# queue (the same arm64 agent seal's own release uses — there's no
+# self-hosted arm64 box). Both run the same build/build-deps.sh inside
 # an Alpine image via the docker plugin — Alpine gives musl + the
 # *-static apk packages the static-GLib xdg-dbus-proxy link needs.
 #
@@ -41,15 +42,14 @@ steps:
         artifact_paths:
           - "out/x86_64/*"
 
-      - label: ":linux: aarch64 (emulated)"
+      - label: ":linux: aarch64"
         key: "build-aarch64"
         agents:
-          queue: "linux-x64-selfhosted"
-        timeout_in_minutes: 60
+          queue: "linux-arm-medium"
+        timeout_in_minutes: 30
         plugins:
           - docker#v5.13.0:
               image: "alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d"
-              platform: "linux/arm64"
               propagate-environment: true
               mount-buildkite-agent: false
               command: ["sh", "-c", "apk add --no-cache bash && ARCH=aarch64 bash build/build-deps.sh"]

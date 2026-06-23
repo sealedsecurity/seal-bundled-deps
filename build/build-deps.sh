@@ -55,6 +55,11 @@ echo "=== seal-bundled-deps build (arch=${ARCH}, out=${OUT_DIR}) ==="
 # without the .a archives the final `-static` link fails with
 # unresolved `-lmount -lblkid`. glib-dev pulls the *dynamic* util-linux
 # libs but not their static counterparts.
+#
+# libeconf-dev carries libeconf.a — libmount.a calls into libeconf
+# (econf_readFile/econf_getStringValue/…) for parsing /etc config, so
+# the static link needs libeconf.a on disk too. Alpine has no
+# libeconf-static; the .a ships in libeconf-dev.
 echo "--- apk: build toolchain + static libs"
 apk add --no-cache \
     build-base linux-headers pkgconf \
@@ -66,6 +71,7 @@ apk add --no-cache \
     pcre2-dev \
     gettext-static \
     util-linux-static \
+    libeconf-dev \
     musl-dev >/dev/null
 
 provenance="${OUT_DIR}/PROVENANCE.txt"
@@ -149,6 +155,24 @@ tar -C "$WORK" -xf "$xdp_tar"
     # the fiddliest link of the set, and swallowing ninja's output
     # hides the linker's undefined-symbol list on failure. Keep it
     # verbose so a link break is diagnosable from the CI log.
+    #
+    # Alpine's mount.pc has an empty `Libs.private`, so pkg-config never
+    # tells meson that static libmount needs libeconf (mount.a calls
+    # econf_*) — the static link fails with undefined econf_* refs.
+    # Patch mount.pc to declare the private dep so pkg-config emits
+    # `-leconf` *in the resolved lib group*, where the linker can
+    # satisfy libmount→libeconf regardless of order. Idempotent.
+    mount_pc="$(pkg-config --variable=pcfiledir mount)/mount.pc"
+    if ! grep -qE '^Libs\.private:.*-leconf' "$mount_pc"; then
+        if grep -qE '^Libs\.private:' "$mount_pc"; then
+            # Append, don't replace — preserve any existing private deps
+            # (Alpine's mount.pc is empty today, but future versions may
+            # populate it).
+            sed -i '/^Libs\.private:/ s|$| -leconf|' "$mount_pc"
+        else
+            printf 'Libs.private: -leconf\n' >>"$mount_pc"
+        fi
+    fi
     meson setup build \
         --default-library=static \
         -Dprefer_static=true \

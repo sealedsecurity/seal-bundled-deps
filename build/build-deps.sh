@@ -165,7 +165,10 @@ tar -C "$WORK" -xf "$xdp_tar"
     mount_pc="$(pkg-config --variable=pcfiledir mount)/mount.pc"
     if ! grep -qE '^Libs\.private:.*-leconf' "$mount_pc"; then
         if grep -qE '^Libs\.private:' "$mount_pc"; then
-            sed -i 's|^Libs\.private:.*|Libs.private: -leconf|' "$mount_pc"
+            # Append, don't replace — preserve any existing private deps
+            # (Alpine's mount.pc is empty today, but future versions may
+            # populate it).
+            sed -i '/^Libs\.private:/ s|$| -leconf|' "$mount_pc"
         else
             printf 'Libs.private: -leconf\n' >>"$mount_pc"
         fi

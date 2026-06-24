@@ -64,7 +64,7 @@ echo "--- apk: build toolchain + static libs"
 apk add --no-cache \
     build-base linux-headers pkgconf \
     meson ninja samurai \
-    curl tar xz \
+    curl tar xz zstd \
     glib-dev glib-static \
     zlib-static \
     libffi-dev \

@@ -69,6 +69,10 @@ for arch in $ARCHES; do
         echo "FATAL: ${src}/${base}.tar.zst not found — build step must run for ${arch} first" >&2
         exit 1
     fi
+    if [[ ! -f "${src}/${base}.tar.zst.sha256" ]]; then
+        echo "FATAL: ${src}/${base}.tar.zst.sha256 not found — checksum sidecar missing for ${arch}" >&2
+        exit 1
+    fi
     cp "${src}/${base}.tar.zst" "${src}/${base}.tar.zst.sha256" dist/
 done
 

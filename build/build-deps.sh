@@ -213,14 +213,16 @@ done
 # extracts into ~/.seal/internal/bin/ verbatim.
 echo "--- :package: archive seal-bundled-deps-${ARCH}.tar.zst"
 base="seal-bundled-deps-${ARCH}"
-staging="$(mktemp -d)/${base}"
+stage_root="$(mktemp -d)"
+staging="${stage_root}/${base}"
 mkdir -p "${staging}/bin"
 cp "${OUT_DIR}/sh" "${OUT_DIR}/bwrap" "${OUT_DIR}/xdg-dbus-proxy" "${staging}/bin/"
 cp "${OUT_DIR}/sh.sha256" "${OUT_DIR}/bwrap.sha256" "${OUT_DIR}/xdg-dbus-proxy.sha256" "${staging}/bin/"
 cp "${provenance}" "${staging}/PROVENANCE.txt"
-tar -C "$(dirname "$staging")" -cf "${OUT_DIR}/${base}.tar" "${base}"
+tar -C "${stage_root}" -cf "${OUT_DIR}/${base}.tar" "${base}"
 zstd -19 -f "${OUT_DIR}/${base}.tar" -o "${OUT_DIR}/${base}.tar.zst"
 rm -f "${OUT_DIR}/${base}.tar"
+rm -rf "${stage_root}"
 ( cd "${OUT_DIR}" && sha256sum "${base}.tar.zst" >"${base}.tar.zst.sha256" )
 
 echo "=== done. artifacts in ${OUT_DIR}:"

@@ -204,5 +204,24 @@ for b in sh bwrap xdg-dbus-proxy; do
     echo "${b} binary sha256: $(awk '{print $1}' "${path}.sha256")" >>"$provenance"
 done
 
+# ─── Package the release archive ──────────────────────────────────
+# Produce the final `seal-bundled-deps-<arch>.tar.zst` HERE, inside
+# the Alpine build container, because zstd lives in apk — the publish
+# step runs bare on the host agent (no zstd) and only uploads what
+# this emits. Layout: `seal-bundled-deps-<arch>/bin/{sh,bwrap,
+# xdg-dbus-proxy + .sha256}` + PROVENANCE.txt, mirroring what seal
+# extracts into ~/.seal/internal/bin/ verbatim.
+echo "--- :package: archive seal-bundled-deps-${ARCH}.tar.zst"
+base="seal-bundled-deps-${ARCH}"
+staging="$(mktemp -d)/${base}"
+mkdir -p "${staging}/bin"
+cp "${OUT_DIR}/sh" "${OUT_DIR}/bwrap" "${OUT_DIR}/xdg-dbus-proxy" "${staging}/bin/"
+cp "${OUT_DIR}/sh.sha256" "${OUT_DIR}/bwrap.sha256" "${OUT_DIR}/xdg-dbus-proxy.sha256" "${staging}/bin/"
+cp "${provenance}" "${staging}/PROVENANCE.txt"
+tar -C "$(dirname "$staging")" -cf "${OUT_DIR}/${base}.tar" "${base}"
+zstd -19 -f "${OUT_DIR}/${base}.tar" -o "${OUT_DIR}/${base}.tar.zst"
+rm -f "${OUT_DIR}/${base}.tar"
+( cd "${OUT_DIR}" && sha256sum "${base}.tar.zst" >"${base}.tar.zst.sha256" )
+
 echo "=== done. artifacts in ${OUT_DIR}:"
 ls -la "${OUT_DIR}"

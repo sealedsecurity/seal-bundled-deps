@@ -61,25 +61,15 @@ export GH_TOKEN
 mkdir -p dist
 for arch in $ARCHES; do
     src="out/${arch}"
-    if [[ ! -d "$src" ]]; then
-        echo "FATAL: ${src} not found — build-deps.sh must run for ${arch} first" >&2
+    base="seal-bundled-deps-${arch}"
+    # The build step (build-deps.sh, in Alpine) already produced the
+    # final archive + its checksum — zstd lives in apk there, not on
+    # this bare host agent. Just collect them for upload.
+    if [[ ! -f "${src}/${base}.tar.zst" ]]; then
+        echo "FATAL: ${src}/${base}.tar.zst not found — build step must run for ${arch} first" >&2
         exit 1
     fi
-    base="seal-bundled-deps-${arch}"
-    # Tar the three binaries + their `.sha256` sidecars + PROVENANCE
-    # with a `bin/` prefix so the archive layout mirrors what seal
-    # extracts into ~/.seal/internal/bin/ verbatim. The per-binary
-    # sidecars let a consumer `sha256sum --check` each binary inside
-    # the extracted tree.
-    staging="$(mktemp -d)/${base}"
-    mkdir -p "${staging}/bin"
-    cp "${src}/sh" "${src}/bwrap" "${src}/xdg-dbus-proxy" "${staging}/bin/"
-    cp "${src}/sh.sha256" "${src}/bwrap.sha256" "${src}/xdg-dbus-proxy.sha256" "${staging}/bin/"
-    cp "${src}/PROVENANCE.txt" "${staging}/"
-    tar -C "$(dirname "$staging")" -cf "dist/${base}.tar" "${base}"
-    zstd -19 -f "dist/${base}.tar" -o "dist/${base}.tar.zst"
-    rm -f "dist/${base}.tar"
-    (cd dist && sha256sum "${base}.tar.zst" >"${base}.tar.zst.sha256")
+    cp "${src}/${base}.tar.zst" "${src}/${base}.tar.zst.sha256" dist/
 done
 
 echo "--- :github: publish ${BUNDLED_DEPS_TAG}"
